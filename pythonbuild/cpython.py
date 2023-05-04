@@ -175,10 +175,7 @@ def parse_setup_line(line: bytes, python_version: str):
 def link_for_target(lib: str, target_triple: str) -> str:
     # TODO use -Wl,-hidden-lbz2?
     # TODO use -Wl,--exclude-libs,libfoo.a?
-    if "-apple-" in target_triple:
-        return f"-Xlinker -hidden-l{lib}"
-    else:
-        return f"-l{lib}"
+    return f"-Xlinker -hidden-l{lib}" if "-apple-" in target_triple else f"-l{lib}"
 
 
 def meets_python_minimum_version(got: str, wanted: str) -> bool:

@@ -19,7 +19,7 @@ def log(msg):
         msg_str = msg
         msg_bytes = msg.encode("utf-8", "replace")
 
-    print("%s> %s" % (LOG_PREFIX[0], msg_str))
+    print(f"{LOG_PREFIX[0]}> {msg_str}")
 
     if LOG_FH[0]:
         LOG_FH[0].write(msg_bytes + b"\n")

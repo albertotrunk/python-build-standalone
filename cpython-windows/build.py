@@ -178,7 +178,7 @@ def log(msg):
         msg_str = msg
         msg_bytes = msg.encode("utf-8", "replace")
 
-    print("%s> %s" % (LOG_PREFIX[0], msg_str))
+    print(f"{LOG_PREFIX[0]}> {msg_str}")
 
     if LOG_FH[0]:
         LOG_FH[0].write(msg_bytes + b"\n")
@@ -186,7 +186,7 @@ def log(msg):
 
 
 def exec_and_log(args, cwd, env, exit_on_error=True):
-    log("executing %s" % " ".join(args))
+    log(f'executing {" ".join(args)}')
 
     p = subprocess.Popen(
         args,
@@ -217,7 +217,7 @@ def find_vswhere():
     )
 
     if not vswhere.exists():
-        print("%s does not exist" % vswhere)
+        print(f"{vswhere} does not exist")
         sys.exit(1)
 
     return vswhere
@@ -252,7 +252,7 @@ def find_vs_path(path, msvc_version):
     p = p / path
 
     if not p.exists():
-        print("%s does not exist" % p)
+        print(f"{p} does not exist")
         sys.exit(1)
 
     return p
@@ -300,7 +300,7 @@ def find_vctools_path():
     tools_path = p / "VC" / "Tools" / "MSVC" / tools_version / "bin" / "Hostx64" / "x64"
 
     if not tools_path.exists():
-        print("%s does not exist" % tools_path)
+        print(f"{tools_path} does not exist")
         sys.exit(1)
 
     return tools_path
@@ -322,9 +322,9 @@ def static_replace_in_file(p: pathlib.Path, search, replace):
     # Build should be as deterministic as possible. Assert that wanted changes
     # actually occur.
     if search not in data:
-        raise NoSearchStringError("search string (%s) not in %s" % (search, p))
+        raise NoSearchStringError(f"search string ({search}) not in {p}")
 
-    log("replacing `%s` with `%s` in %s" % (search, replace, p))
+    log(f"replacing `{search}` with `{replace}` in {p}")
     data = data.replace(search, replace)
 
     with p.open("wb") as fh:
@@ -344,12 +344,12 @@ def add_to_config_c(source_path: pathlib.Path, extension: str, init_fn: str):
 
             # Insert the init function declaration before the _inittab struct.
             if line.startswith("struct _inittab"):
-                log("adding %s declaration to config.c" % init_fn)
-                lines.append("extern PyObject* %s(void);" % init_fn)
+                log(f"adding {init_fn} declaration to config.c")
+                lines.append(f"extern PyObject* {init_fn}(void);")
 
             # Insert the extension in the _inittab struct.
             if line.lstrip().startswith("/* Sentinel */"):
-                log("marking %s as a built-in extension module" % extension)
+                log(f"marking {extension} as a built-in extension module")
                 lines.append('{"%s", %s},' % (extension, init_fn))
 
             lines.append(line)
@@ -375,16 +375,12 @@ def remove_from_extension_modules(source_path: pathlib.Path, extension: str):
         for line in fh:
             line = line.rstrip()
 
-            m = RE_EXTENSION_MODULES.search(line)
+            if m := RE_EXTENSION_MODULES.search(line):
+                if modules := [m for m in m[2].split(";") if m != extension]:
+                    line = line.replace(m[2], ";".join(modules))
 
-            if m:
-                modules = [m for m in m.group(2).split(";") if m != extension]
-
-                # Ignore line if new value is empty.
-                if not modules:
+                else:
                     continue
-
-                line = line.replace(m.group(2), ";".join(modules))
 
             lines.append(line)
 
@@ -395,7 +391,7 @@ def remove_from_extension_modules(source_path: pathlib.Path, extension: str):
 def make_project_static_library(source_path: pathlib.Path, project: str):
     """Turn a project file into a static library."""
 
-    proj_path = source_path / "PCbuild" / ("%s.vcxproj" % project)
+    proj_path = source_path / "PCbuild" / f"{project}.vcxproj"
     lines = []
 
     found_config_type = False
@@ -407,29 +403,29 @@ def make_project_static_library(source_path: pathlib.Path, project: str):
 
             # Change the project configuration to a static library.
             if "<ConfigurationType>DynamicLibrary</ConfigurationType>" in line:
-                log("changing %s to a static library" % project)
+                log(f"changing {project} to a static library")
                 found_config_type = True
                 line = line.replace("DynamicLibrary", "StaticLibrary")
 
             elif "<ConfigurationType>StaticLibrary</ConfigurationType>" in line:
-                log("%s is already a static library" % project)
+                log(f"{project} is already a static library")
                 return
 
             # Change the output file name from .pyd to .lib because it is no
             # longer an extension.
             if "<TargetExt>.pyd</TargetExt>" in line:
-                log("changing output of %s to a .lib" % project)
+                log(f"changing output of {project} to a .lib")
                 found_target_ext = True
                 line = line.replace(".pyd", ".lib")
 
             lines.append(line)
 
     if not found_config_type:
-        log("failed to adjust config type for %s" % project)
+        log(f"failed to adjust config type for {project}")
         sys.exit(1)
 
     if not found_target_ext:
-        log("failed to adjust target extension for %s" % project)
+        log(f"failed to adjust target extension for {project}")
         sys.exit(1)
 
     with proj_path.open("w", encoding="utf8") as fh:

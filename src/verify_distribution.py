@@ -33,8 +33,7 @@ for parts in TCL_PATHS:
 
 # Need to set TERMINFO_DIRS so terminfo database can be located.
 if "TERMINFO_DIRS" not in os.environ:
-    terminfo_dirs = [p for p in TERMINFO_DIRS if os.path.exists(p)]
-    if terminfo_dirs:
+    if terminfo_dirs := [p for p in TERMINFO_DIRS if os.path.exists(p)]:
         os.environ["TERMINFO_DIRS"] = ":".join(terminfo_dirs)
 
 
@@ -84,10 +83,6 @@ class TestPythonInterpreter(unittest.TestCase):
             "sha1",
             "sha224",
             "sha256",
-            "sha3_224",
-            "sha3_256",
-            "sha3_384",
-            "sha3_512",
             "sha384",
             "sha3_224",
             "sha3_256",
@@ -96,8 +91,6 @@ class TestPythonInterpreter(unittest.TestCase):
             "sha512",
             "sha512_224",
             "sha512_256",
-            "shake_128",
-            "shake_256",
             "shake_128",
             "shake_256",
             "sm3",

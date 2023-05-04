@@ -27,10 +27,7 @@ TARGETS_CONFIG = SUPPORT / "targets.yml"
 
 
 def main():
-    if sys.platform == "linux":
-        host_platform = "linux64"
-        default_target_triple = "x86_64-unknown-linux-gnu"
-    elif sys.platform == "darwin":
+    if sys.platform == "darwin":
         host_platform = "macos"
         machine = platform.machine()
 
@@ -39,9 +36,12 @@ def main():
         elif machine == "x86_64":
             default_target_triple = "x86_64-apple-darwin"
         else:
-            raise Exception("unhandled macOS machine value: %s" % machine)
+            raise Exception(f"unhandled macOS machine value: {machine}")
+    elif sys.platform == "linux":
+        host_platform = "linux64"
+        default_target_triple = "x86_64-unknown-linux-gnu"
     else:
-        print("unsupport build platform: %s" % sys.platform)
+        print(f"unsupport build platform: {sys.platform}")
         return 1
 
     parser = argparse.ArgumentParser()
@@ -73,7 +73,7 @@ def main():
     parser.add_argument(
         "--no-docker",
         action="store_true",
-        default=True if sys.platform == "darwin" else False,
+        default=sys.platform == "darwin",
         help="Disable building in Docker",
     )
     parser.add_argument(
@@ -103,12 +103,11 @@ def main():
 
     settings = get_target_settings(TARGETS_CONFIG, target_triple)
 
-    supported_pythons = {"cpython-%s" % p for p in settings["pythons_supported"]}
+    supported_pythons = {f"cpython-{p}" for p in settings["pythons_supported"]}
 
     if args.python not in supported_pythons:
         print(
-            "%s only supports following Pythons: %s"
-            % (target_triple, ", ".join(supported_pythons))
+            f'{target_triple} only supports following Pythons: {", ".join(supported_pythons)}'
         )
         return 1
 
@@ -128,7 +127,7 @@ def main():
 
     entry = DOWNLOADS[args.python]
     env["PYBUILD_PYTHON_VERSION"] = entry["version"]
-    env["PYBUILD_PYTHON_MAJOR_VERSION"] = ".".join(entry["version"].split(".")[0:2])
+    env["PYBUILD_PYTHON_MAJOR_VERSION"] = ".".join(entry["version"].split(".")[:2])
 
     if "PYBUILD_RELEASE_TAG" in os.environ:
         release_tag = os.environ["PYBUILD_RELEASE_TAG"]
@@ -136,7 +135,7 @@ def main():
         release_tag = release_tag_from_git()
 
     archive_components = [
-        "cpython-%s" % entry["version"],
+        f'cpython-{entry["version"]}',
         target_triple,
         args.optimizations,
     ]
