@@ -30,7 +30,7 @@ def write_dockerfiles(source_dir: pathlib.Path, dest_dir: pathlib.Path):
 
 
 def build_docker_image(client, image_data: bytes, image_dir: pathlib.Path, name):
-    image_path = image_dir / ("image-%s" % name)
+    image_path = image_dir / f"image-{name}"
 
     return ensure_docker_image(client, io.BytesIO(image_data), image_path=image_path)
 
@@ -52,7 +52,7 @@ def ensure_docker_image(client, fh, image_path=None):
         raise Exception("unable to determine built Docker image")
 
     if image_path:
-        tar_path = pathlib.Path(str(image_path) + ".tar")
+        tar_path = pathlib.Path(f"{str(image_path)}.tar")
         with tar_path.open("wb") as fh:
             for chunk in client.images.get(image).save():
                 fh.write(chunk)
@@ -67,7 +67,7 @@ def get_image(client, source_dir: pathlib.Path, image_dir: pathlib.Path, name):
     if client is None:
         return None
 
-    image_path = image_dir / ("image-%s" % name)
+    image_path = image_dir / f"image-{name}"
     tar_path = image_path.with_suffix(".tar")
 
     with image_path.open("r") as fh:
@@ -77,15 +77,13 @@ def get_image(client, source_dir: pathlib.Path, image_dir: pathlib.Path, name):
         client.images.get(image_id)
         return image_id
     except docker.errors.ImageNotFound:
-        if tar_path.exists():
-            with tar_path.open("rb") as fh:
-                data = fh.read()
-            client.images.load(data)
-
-            return image_id
-
-        else:
+        if not tar_path.exists():
             return build_docker_image(client, source_dir, image_dir, name)
+        with tar_path.open("rb") as fh:
+            data = fh.read()
+        client.images.load(data)
+
+        return image_id
 
 
 def copy_file_to_container(path, container, container_path, archive_path=None):
@@ -97,7 +95,7 @@ def copy_file_to_container(path, container, container_path, archive_path=None):
     tf.add(str(path), dest_path)
     tf.close()
 
-    log("copying %s to container:%s/%s" % (path, container_path, dest_path))
+    log(f"copying {path} to container:{container_path}/{dest_path}")
     container.put_archive(container_path, buf.getvalue())
 
 
@@ -132,7 +130,7 @@ def container_exec(container, command, user="build", environment=None):
 
     if inspect_res["ExitCode"] != 0:
         if "PYBUILD_BREAK_ON_FAILURE" in os.environ:
-            print("to enter container: docker exec -it %s /bin/bash" % container.id)
+            print(f"to enter container: docker exec -it {container.id} /bin/bash")
             import pdb
 
             pdb.set_trace()
@@ -155,11 +153,11 @@ def container_get_archive(container, path):
 
     new_data = io.BytesIO()
 
-    with tarfile.open(fileobj=old_data) as itf, tarfile.open(
-        fileobj=new_data, mode="w"
-    ) as otf:
+    with (tarfile.open(fileobj=old_data) as itf, tarfile.open(
+            fileobj=new_data, mode="w"
+        ) as otf):
         for member in sorted(itf.getmembers(), key=operator.attrgetter("name")):
-            file_data = itf.extractfile(member) if not member.linkname else None
+            file_data = None if member.linkname else itf.extractfile(member)
             member.mtime = DEFAULT_MTIME
             otf.addfile(member, file_data)
 

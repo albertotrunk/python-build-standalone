@@ -40,27 +40,22 @@ class ContainerContext(object):
 
     def install_toolchain_archive(self, build_dir, package_name, host_platform):
         entry = DOWNLOADS[package_name]
-        basename = "%s-%s-%s.tar" % (package_name, entry["version"], host_platform)
+        basename = f'{package_name}-{entry["version"]}-{host_platform}.tar'
 
         p = build_dir / basename
         self.copy_file(p)
-        self.run(["/bin/tar", "-C", "/tools", "-xf", "/build/%s" % p.name], user="root")
+        self.run(["/bin/tar", "-C", "/tools", "-xf", f"/build/{p.name}"], user="root")
 
     def install_artifact_archive(
         self, build_dir, package_name, target_triple, optimizations
     ):
         entry = DOWNLOADS[package_name]
-        basename = "%s-%s-%s-%s.tar" % (
-            package_name,
-            entry["version"],
-            target_triple,
-            optimizations,
-        )
+        basename = f'{package_name}-{entry["version"]}-{target_triple}-{optimizations}.tar'
 
         p = build_dir / basename
 
         self.copy_file(p)
-        self.run(["/bin/tar", "-C", "/tools", "-xf", "/build/%s" % p.name], user="root")
+        self.run(["/bin/tar", "-C", "/tools", "-xf", f"/build/{p.name}"], user="root")
 
     def install_toolchain(
         self,
@@ -84,20 +79,20 @@ class ContainerContext(object):
 
     def run(self, program, user="build", environment=None):
         if isinstance(program, str) and not program.startswith("/"):
-            program = "/build/%s" % program
+            program = f"/build/{program}"
 
         container_exec(self.container, program, user=user, environment=environment)
 
     def get_tools_archive(self, dest, name):
-        log("copying container files to %s" % dest)
-        data = container_get_archive(self.container, "/build/out/tools/%s" % name)
+        log(f"copying container files to {dest}")
+        data = container_get_archive(self.container, f"/build/out/tools/{name}")
 
         with open(dest, "wb") as fh:
             fh.write(data)
 
     def get_file(self, path):
-        log("retrieving container file %s" % path)
-        data = io.BytesIO(container_get_archive(self.container, "/build/%s" % path))
+        log(f"retrieving container file {path}")
+        data = io.BytesIO(container_get_archive(self.container, f"/build/{path}"))
 
         with tarfile.open(fileobj=data) as tf:
             for ti in tf:
@@ -108,26 +103,23 @@ class ContainerContext(object):
     def get_output_archive(self, path=None, as_tar=False):
         p = "/build/out"
         if path:
-            p += "/%s" % path
+            p += f"/{path}"
 
         data = container_get_archive(self.container, p)
         data = io.BytesIO(data)
 
         data = normalize_tar_archive(data)
 
-        if as_tar:
-            return tarfile.open(fileobj=data)
-        else:
-            return data.getvalue()
+        return tarfile.open(fileobj=data) if as_tar else data.getvalue()
 
     def find_output_files(self, base_path, pattern):
-        command = ["/usr/bin/find", "/build/out/%s" % base_path, "-name", pattern]
+        command = ["/usr/bin/find", f"/build/out/{base_path}", "-name", pattern]
 
         for line in self.container.exec_run(command, user="build")[1].splitlines():
             if not line.strip():
                 continue
 
-            yield line[len("/build/out/%s/" % base_path) :].decode("ascii")
+            yield line[len(f"/build/out/{base_path}/"):].decode("ascii")
 
 
 class TempdirContext(object):
@@ -141,40 +133,31 @@ class TempdirContext(object):
         return False
 
     def copy_file(self, source: pathlib.Path, dest_path=None, dest_name=None):
-        if dest_path:
-            dest_dir = self.td / dest_path
-        else:
-            dest_dir = self.td
-
+        dest_dir = self.td / dest_path if dest_path else self.td
         dest_dir.mkdir(exist_ok=True)
 
         dest_name = dest_name or source.name
-        log("copying %s to %s/%s" % (source, dest_dir, dest_name))
+        log(f"copying {source} to {dest_dir}/{dest_name}")
         shutil.copy(source, dest_dir / dest_name)
 
     def install_toolchain_archive(self, build_dir, package_name, host_platform):
         entry = DOWNLOADS[package_name]
-        basename = "%s-%s-%s.tar" % (package_name, entry["version"], host_platform)
+        basename = f'{package_name}-{entry["version"]}-{host_platform}.tar'
 
         p = build_dir / basename
         dest_path = self.td / "tools"
-        log("extracting %s to %s" % (p, dest_path))
+        log(f"extracting {p} to {dest_path}")
         extract_tar_to_directory(p, dest_path)
 
     def install_artifact_archive(
         self, build_dir, package_name, target_triple, optimizations
     ):
         entry = DOWNLOADS[package_name]
-        basename = "%s-%s-%s-%s.tar" % (
-            package_name,
-            entry["version"],
-            target_triple,
-            optimizations,
-        )
+        basename = f'{package_name}-{entry["version"]}-{target_triple}-{optimizations}.tar'
 
         p = build_dir / basename
         dest_path = self.td / "tools"
-        log("extracting %s to %s" % (p, dest_path))
+        log(f"extracting {p} to {dest_path}")
         extract_tar_to_directory(p, dest_path)
 
     def install_toolchain(
@@ -207,13 +190,13 @@ class TempdirContext(object):
         exec_and_log(program, cwd=self.td, env=environment)
 
     def get_tools_archive(self, dest, name):
-        log("copying built files to %s" % dest)
+        log(f"copying built files to {dest}")
 
         with dest.open("wb") as fh:
             create_tar_from_directory(fh, self.td / "out" / "tools")
 
     def get_file(self, path):
-        log("retrieving file %s" % path)
+        log(f"retrieving file {path}")
 
         p = self.td / path
         with p.open("rb") as fh:
@@ -228,10 +211,7 @@ class TempdirContext(object):
 
         data = normalize_tar_archive(data)
 
-        if as_tar:
-            return tarfile.open(fileobj=data)
-        else:
-            return data.getvalue()
+        return tarfile.open(fileobj=data) if as_tar else data.getvalue()
 
     def find_output_files(self, base_path, pattern):
         base = str(self.td / "out" / base_path)

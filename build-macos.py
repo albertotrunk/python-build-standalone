@@ -27,7 +27,7 @@ def bootstrap():
     subprocess.run([str(PIP), "install", "-r", str(REQUIREMENTS)], check=True)
 
     os.environ["PYBUILD_BOOTSTRAPPED"] = "1"
-    os.environ["PATH"] = "%s:%s" % (str(VENV / "bin"), os.environ["PATH"])
+    os.environ["PATH"] = f'{str(VENV / "bin")}:{os.environ["PATH"]}'
     os.environ["PYTHONPATH"] = str(ROOT)
 
     args = [str(PYTHON), __file__, *sys.argv[1:]]

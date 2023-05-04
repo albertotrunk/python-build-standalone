@@ -71,12 +71,11 @@ def install_sccache(build_env):
     # may not run. And running sccache in an isolated environment won't
     # do anything meaningful unless an external cache is being used.
     if not build_env.is_isolated:
-        for path in os.environ.get("PATH", "").split(":"):
-            if not path:
-                continue
-
-            candidates.append(pathlib.Path(path) / "sccache")
-
+        candidates.extend(
+            pathlib.Path(path) / "sccache"
+            for path in os.environ.get("PATH", "").split(":")
+            if path
+        )
     for candidate in candidates:
         if candidate.exists():
             build_env.copy_file(candidate)
@@ -128,15 +127,14 @@ def add_target_env(env, build_platform, target_triple, build_env):
         elif machine == "x86_64":
             env["BUILD_TRIPLE"] = "x86_64-apple-darwin"
         else:
-            raise Exception("unhandled macOS machine value: %s" % machine)
+            raise Exception(f"unhandled macOS machine value: {machine}")
 
         # Sniff out the Apple SDK minimum deployment target from cflags and
         # export in its own variable. This is used by CPython's configure, as
         # it doesn't sniff the cflag.
         for flag in extra_target_cflags:
-            m = re.search("-version-min=(.*)$", flag)
-            if m:
-                env["APPLE_MIN_DEPLOYMENT_TARGET"] = m.group(1)
+            if m := re.search("-version-min=(.*)$", flag):
+                env["APPLE_MIN_DEPLOYMENT_TARGET"] = m[1]
                 break
         else:
             raise Exception("could not find minimum Apple SDK version in cflags")
@@ -172,7 +170,7 @@ def add_target_env(env, build_platform, target_triple, build_env):
             sdk_path = res.stdout.strip()
 
         if not os.path.exists(sdk_path):
-            raise Exception("macOS SDK path %s does not exist" % sdk_path)
+            raise Exception(f"macOS SDK path {sdk_path} does not exist")
 
         # Grab the version from the SDK so we can put it in PYTHON.json.
         sdk_settings_path = pathlib.Path(sdk_path) / "SDKSettings.json"
@@ -197,7 +195,7 @@ def add_target_env(env, build_platform, target_triple, build_env):
             ).stdout.strip()
 
         if not os.path.exists(host_sdk_path):
-            raise Exception("macOS host SDK path %s does not exist" % host_sdk_path)
+            raise Exception(f"macOS host SDK path {host_sdk_path} does not exist")
 
         extra_host_cflags.extend(["-isysroot", host_sdk_path])
         extra_host_ldflags.extend(["-isysroot", host_sdk_path])
@@ -211,7 +209,7 @@ def add_target_env(env, build_platform, target_triple, build_env):
 def toolchain_archive_path(package_name, host_platform):
     entry = DOWNLOADS[package_name]
 
-    basename = "%s-%s-%s.tar" % (package_name, entry["version"], host_platform)
+    basename = f'{package_name}-{entry["version"]}-{host_platform}.tar'
 
     return BUILD / basename
 
@@ -249,10 +247,12 @@ def simple_build(
             build_env.install_artifact_archive(BUILD, a, target_triple, optimizations)
 
         build_env.copy_file(archive)
-        build_env.copy_file(SUPPORT / ("build-%s.sh" % entry))
+        build_env.copy_file(SUPPORT / f"build-{entry}.sh")
 
         env = {
-            "%s_VERSION" % entry.upper().replace("-", "_"): DOWNLOADS[entry]["version"],
+            f'{entry.upper().replace("-", "_")}_VERSION': DOWNLOADS[entry][
+                "version"
+            ]
         }
 
         add_target_env(env, host_platform, target_triple, build_env)
@@ -261,7 +261,7 @@ def simple_build(
             settings = get_targets(TARGETS_CONFIG)[target_triple]
             env["OPENSSL_TARGET"] = settings["openssl_target"]
 
-        build_env.run("build-%s.sh" % entry, environment=env)
+        build_env.run(f"build-{entry}.sh", environment=env)
 
         build_env.get_tools_archive(dest_archive, tools_path)
 
@@ -293,11 +293,7 @@ def build_binutils(client, image, host_platform):
 def materialize_clang(host_platform: str, target_triple: str):
     entry = clang_toolchain(host_platform, target_triple)
     tar_zst = download_entry(entry, DOWNLOADS_PATH)
-    local_filename = "%s-%s-%s.tar" % (
-        entry,
-        DOWNLOADS[entry]["version"],
-        host_platform,
-    )
+    local_filename = f'{entry}-{DOWNLOADS[entry]["version"]}-{host_platform}.tar'
 
     dctx = zstandard.ZstdDecompressor()
 
@@ -389,7 +385,7 @@ def build_tix(
             build_env.copy_file(p)
 
         env = {
-            "TOOLCHAIN": "clang-%s" % host_platform,
+            "TOOLCHAIN": f"clang-{host_platform}",
             "TCL_VERSION": DOWNLOADS["tcl"]["version"],
             "TIX_VERSION": DOWNLOADS["tix"]["version"],
             "TK_VERSION": DOWNLOADS["tk"]["version"],
@@ -427,10 +423,9 @@ def python_build_info(
         )
 
         if not musl:
-            bi["core"]["shared_lib"] = "install/lib/libpython%s%s.so.1.0" % (
-                version,
-                binary_suffix,
-            )
+            bi["core"][
+                "shared_lib"
+            ] = f"install/lib/libpython{version}{binary_suffix}.so.1.0"
 
         if optimizations in ("lto", "pgo+lto"):
             llvm_version = DOWNLOADS[clang_toolchain(platform, target_triple)][
@@ -448,19 +443,18 @@ def python_build_info(
         ] = "install/lib/python{version}/config-{version}{binary_suffix}-darwin/libpython{version}{binary_suffix}.a".format(
             version=version, binary_suffix=binary_suffix
         )
-        bi["core"]["shared_lib"] = "install/lib/libpython%s%s.dylib" % (
-            version,
-            binary_suffix,
-        )
+        bi["core"][
+            "shared_lib"
+        ] = f"install/lib/libpython{version}{binary_suffix}.dylib"
 
         if optimizations in ("lto", "pgo+lto"):
             object_file_format = (
-                "llvm-bitcode:%s" % DOWNLOADS["llvm-aarch64-macos"]["version"]
+                f'llvm-bitcode:{DOWNLOADS["llvm-aarch64-macos"]["version"]}'
             )
         else:
             object_file_format = "mach-o"
     else:
-        raise Exception("unsupported platform: %s" % platform)
+        raise Exception(f"unsupported platform: {platform}")
 
     bi["object_file_format"] = object_file_format
 
@@ -475,12 +469,14 @@ def python_build_info(
         if lib.startswith("-l"):
             lib = lib[2:]
 
-            if platform == "linux64" and lib not in LINUX_ALLOW_SYSTEM_LIBRARIES:
-                raise Exception("unexpected library in LIBS (%s): %s" % (libs, lib))
-            elif platform == "macos" and lib not in MACOS_ALLOW_SYSTEM_LIBRARIES:
-                raise Exception("unexpected library in LIBS (%s): %s" % (libs, lib))
-
-            log("adding core system link library: %s" % lib)
+            if (
+                platform == "linux64"
+                and lib not in LINUX_ALLOW_SYSTEM_LIBRARIES
+                or platform == "macos"
+                and lib not in MACOS_ALLOW_SYSTEM_LIBRARIES
+            ):
+                raise Exception(f"unexpected library in LIBS ({libs}): {lib}")
+            log(f"adding core system link library: {lib}")
             bi["core"]["links"].append(
                 {
                     "name": lib,
@@ -491,14 +487,12 @@ def python_build_info(
             skip = True
             framework = libs[i + 1]
             if framework not in MACOS_ALLOW_FRAMEWORKS:
-                raise Exception(
-                    "unexpected framework in LIBS (%s): %s" % (libs, framework)
-                )
+                raise Exception(f"unexpected framework in LIBS ({libs}): {framework}")
 
-            log("adding core link framework: %s" % framework)
+            log(f"adding core link framework: {framework}")
             bi["core"]["links"].append({"name": framework, "framework": True})
         else:
-            raise Exception("unknown word in LIBS (%s): %s" % (libs, lib))
+            raise Exception(f"unknown word in LIBS ({libs}): {lib}")
 
     # Object files for the core distribution are found by walking the
     # build artifacts.
@@ -515,7 +509,7 @@ def python_build_info(
             modules_objs.add(rel_path)
 
     for p in sorted(core_objs):
-        log("adding core object file: %s" % p)
+        log(f"adding core object file: {p}")
         bi["core"]["objs"].append(str(p))
 
     assert pathlib.Path("build/Modules/config.o") in modules_objs
@@ -543,7 +537,7 @@ def python_build_info(
 
         for obj in sorted(d["posix_obj_paths"]):
             obj = pathlib.Path("build") / obj
-            log("adding object file %s for extension %s" % (obj, extension))
+            log(f"adding object file {obj} for extension {extension}")
             objs.append(str(obj))
 
             # Mark object file as used so we don't include it in the core
@@ -555,14 +549,14 @@ def python_build_info(
         links = []
 
         for framework in sorted(d["frameworks"]):
-            log("adding framework %s for extension %s" % (framework, extension))
+            log(f"adding framework {framework} for extension {extension}")
             links.append({"name": framework, "framework": True})
 
         for libname in sorted(d["links"]):
-            log("adding library %s for extension %s" % (libname, extension))
+            log(f"adding library {libname} for extension {extension}")
 
             if libname in libraries:
-                entry = {"name": libname, "path_static": "build/lib/lib%s.a" % libname}
+                entry = {"name": libname, "path_static": f"build/lib/lib{libname}.a"}
 
                 links.append(entry)
             else:
@@ -589,7 +583,7 @@ def python_build_info(
     # Any paths left in modules_objs are not part of any extension and are
     # instead part of the core distribution.
     for p in sorted(modules_objs):
-        log("adding core object file %s" % p)
+        log(f"adding core object file {p}")
         bi["core"]["objs"].append(str(p))
 
     return bi
